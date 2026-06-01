@@ -45,37 +45,47 @@
 <script>
     let linhasCache = null;
     let cabecalhoCache = null;
-    const separador = ';'; // Padrão do Excel brasileiro
+    let separador = ';'; 
+
+    // Função para remover acentos na hora de comparar o texto
+    function removerAcentos(texto) {
+        return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    }
 
     async function carregarCSVPuro() {
         try {
-            // Puxa o arquivo CSV que está na mesma pasta do site
             const res = await fetch('banco.csv');
             const buffer = await res.arrayBuffer();
             
-            // Decodificador para não quebrar acentos do Windows/Excel
+            // Força a leitura correta de acentos do padrão brasileiro
             const decoder = new TextDecoder('utf-8');
             const texto = decoder.decode(buffer);
             
             linhasCache = texto.split(/\r?\n/);
+            
             if (linhasCache.length > 0) {
-                cabecalhoCache = linhasCache[0].split(separador).map(c => c.replace(/"/g, '').trim());
+                // Descobre se o CSV usa ponto e vírgula ou vírgula
+                const primeiraLinha = linhasCache[0];
+                if (primeiraLinha.indexOf(';') === -1 && primeiraLinha.indexOf(',') !== -1) {
+                    separador = ',';
+                }
+                cabecalhoCache = primeiraLinha.split(separador).map(c => c.replace(/"/g, '').trim());
             }
 
             document.getElementById('status').innerText = "✅ Banco de Dados CSV Pronto! Consultas liberadas.";
             document.getElementById('status').style.background = "#e6f4ea";
             document.getElementById('status').style.color = "#137333";
         } catch (err) {
-            document.getElementById('status').innerText = "❌ Erro ao carregar o arquivo banco.csv do servidor.";
-            document.getElementById('status').style.background = "#fce8e6";
-            document.getElementById('status').style.color = "#c5221f";
+            document.getElementById('status').innerText = "❌ Erro ao carregar o arquivo banco.csv.";
             console.error(err);
         }
     }
 
     function executarBuscaCSV() {
-        const termo = document.getElementById('termoBusca').value.trim().toLowerCase();
-        if (!termo || !linhasCache) return;
+        const termoOriginal = document.getElementById('termoBusca').value.trim();
+        if (!termoOriginal || !linhasCache) return;
+        
+        const termoSemAcento = removerAcentos(termoOriginal);
         
         const tabelaElemento = document.getElementById('corpo-tabela');
         const topoElemento = document.getElementById('topo-tabela');
@@ -88,12 +98,15 @@
         for (let i = 1; i < linhasCache.length; i++) {
             if (!linhasCache[i].trim()) continue;
             
-            if (linhasCache[i].toLowerCase().indexOf(termo) !== -1) {
+            // Remove acentos da linha inteira antes de testar a busca
+            const linhaSemAcento = removerAcentos(linhasCache[i]);
+            
+            if (linhaSemAcento.indexOf(termoSemAcento) !== -1) {
                 const colunas = linhasCache[i].split(separador).map(v => v.replace(/"/g, '').trim());
                 while (colunas.length < cabecalhoCache.length) colunas.push("");
                 correspondencias.push(colunas);
             }
-            if (correspondencias.length >= 150) break; // Limite visual rápido
+            if (correspondencias.length >= 150) break; 
         }
         
         if (correspondencias.length === 0) {
