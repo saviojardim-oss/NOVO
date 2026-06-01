@@ -3,119 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Buscador Fiscal Geral</title>
+    <title>Sistema de Consulta Imobiliária</title>
     <style>
-        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 20px; background-color: #f5f7fb; color: #333; }
-        .container { max-width: 100%; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
-        input[type="text"] { flex: 1; padding: 12px; font-size: 16px; border: 2px solid #dadce0; border-radius: 6px; }
-        input[type="text"]:focus { border-color: #1a73e8; outline: none; }
-        button { padding: 12px 25px; font-size: 16px; background-color: #1a73e8; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        button:hover { background-color: #1557b0; }
-        .table-wrapper { overflow-x: auto; margin-top: 15px; max-height: 600px; border: 1px solid #dadce0; border-radius: 6px; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th, td { border: 1px solid #dadce0; padding: 12px; text-align: left; white-space: nowrap; }
-        th { background-color: #f8f9fa; position: sticky; top: 0; z-index: 5; color: #3c4043; }
-        tr:nth-child(even) { background-color: #f8f9fa; }
-        .contador { font-size: 14px; color: #5f6368; font-weight: bold; margin-top: 10px; }
-        .status-msg { padding: 12px; background: #e8f0fe; color: #1a73e8; border-radius: 6px; margin-bottom: 15px; font-weight: bold; }
-        .loading-text { color: #1a73e8; font-weight: bold; }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f8f9fa; margin: 0; padding: 30px 15px; color: #333; }
+        .container { max-width: 100%; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { color: #1e3a8a; margin-top: 0; font-size: 24px; text-align: center; }
+        
+        /* Barra de Busca */
+        .search-container { position: relative; max-width: 600px; margin: 0 auto 25px auto; }
+        .search-box { width: 100%; padding: 14px 20px; font-size: 16px; border: 2px solid #cbd5e1; border-radius: 30px; outline: none; transition: all 0.3s; }
+        .search-box:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
+        
+        /* Contador de Resultados */
+        .contador { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 15px; font-weight: 500; }
+
+        /* Tabela Responsiva */
+        .table-responsive { overflow-x: auto; margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+        th { background-color: #1e3a8a; color: white; padding: 12px 10px; font-weight: 600; white-space: nowrap; }
+        td { padding: 10px; border-bottom: 1px solid #e2e8f0; color: #475569; }
+        tr:nth-child(even) { background-color: #f8fafc; }
+        tr:hover { background-color: #f1f5f9; }
+
+        .sem-resultados { text-align: center; padding: 40px; color: #94a3b8; font-style: italic; }
+        .carregando { text-align: center; padding: 20px; color: #3b82f6; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="status" class="status-msg">⏳ Carregando base de dados CSV... Aguarde.</div>
-
-    <div class="search-box">
-        <input type="text" id="termoBusca" placeholder="Digite nome, CPF, inscrição, bairro... e pressione Enter">
-        <button id="btnEnviarBusca" onclick="executarBuscaCSV()">Buscar Tudo</button>
-    </div>
-
-    <div id="contador-resultados" class="contador"></div>
+    <h1>📋 Consulta de Imóveis e Proprietários</h1>
     
-    <div class="table-wrapper">
-        <table>
-            <thead id="topo-tabela"></thead>
-            <tbody id="corpo-tabela"></tbody>
+    <div class="search-container">
+        <input type="text" id="search-input" class="search-box" placeholder="Carregando dados, aguarde..." disabled>
+    </div>
+    
+    <div id="contador-resultados" class="contador"></div>
+
+    <div class="table-responsive">
+        <table id="tabela-resultados">
+            <thead>
+                <tr>
+                    <th>Proprietário</th>
+                    <th>Responsável</th>
+                    <th>CNPJ/CPF Resp.</th>
+                    <th>Inscrição</th>
+                    <th>Bairro</th>
+                    <th>Logradouro</th>
+                    <th>Nº</th>
+                    <th>CEP</th>
+                    <th>Quadra</th>
+                    <th>Lote</th>
+                    <th>Área Terr. (m²)</th>
+                    <th>Área Edif. (m²)</th>
+                    <th>Matrícula</th>
+                    <th>Endereço Entrega</th>
+                </tr>
+            </thead>
+            <tbody id="corpo-tabela">
+                <!-- Os dados vão aparecer aqui -->
+            </tbody>
         </table>
     </div>
+    <div id="status-mensagem" class="carregando">Buscando arquivo CSV...</div>
 </div>
 
 <script>
-    let linhasCache = null;
-    let cabecalhoCache = null;
-    let separadorGlobal = ';'; 
+    let dadosImoveis = [];
 
-    function removerAcentos(texto) {
-        return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    }
+    // Função para ler o CSV considerando que pode haver vírgulas dentro de aspas
+    function parseCSV(text) {
+        let lines = text.split('\n');
+        let result = [];
+        let headers = lines[0].split(',').map(h => h.trim());
 
-    // Função inteligente que testa qual formato decodifica melhor os acentos brutos
-    function decodificarTexto(buffer) {
-        const decodificadores = ['utf-8', 'windows-1252'];
-        let textoFinal = "";
-        
-        for (let codificacao of decodificadores) {
-            const decoder = new TextDecoder(codificacao);
-            const textoTestado = decoder.decode(buffer);
-            // Se não contiver caracteres corrompidos clássicos de conversão ANSI->UTF8, escolhe ele
-            if (!textoTestado.includes('') || codificacao === 'windows-1252') {
-                textoFinal = textoTestado;
-                console.log("Codificação detectada: " + codificacao);
-                break;
-            }
-        }
-        return textoFinal;
-    }
-
-    async function carregarCSVPuro() {
-        try {
-            const res = await fetch('banco.csv');
-            const buffer = await res.arrayBuffer();
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
             
-            const texto = decodificarTexto(buffer);
-            linhasCache = texto.split(/\r?\n/);
+            // Expressão regular para separar por vírgula, ignorando vírgulas dentro de aspas
+            let matches = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
+            let obj = {};
             
-            if (linhasCache.length > 0) {
-                const primeiraLinha = linhasCache[0];
-                // Identifica automaticamente o separador correto
-                if (primeiraLinha.indexOf(';') !== -1) separadorGlobal = ';';
-                else if (primeiraLinha.indexOf(',') !== -1) separadorGlobal = ',';
-                else if (primeiraLinha.indexOf('\t') !== -1) separadorGlobal = '\t';
-
-                cabecalhoCache = primeiraLinha.split(separadorGlobal).map(c => c.replace(/"/g, '').trim());
-            }
-
-            document.getElementById('status').innerText = "✅ Banco de Dados CSV Pronto! Consultas liberadas.";
-            document.getElementById('status').style.background = "#e6f4ea";
-            document.getElementById('status').style.color = "#137333";
-        } catch (err) {
-            document.getElementById('status').innerText = "❌ Erro ao ler o arquivo banco.csv.";
-            console.error(err);
+            headers.forEach((header, index) => {
+                let valor = matches[index] ? matches[index].replace(/^"|"$/g, '').trim() : '';
+                obj[header] = valor;
+            });
+            result.push(obj);
         }
+        return result;
     }
 
-    function executarBuscaCSV() {
-        const termoOriginal = document.getElementById('termoBusca').value.trim();
-        if (!termoOriginal || !linhasCache) return;
-        
-        const termoSemAcento = removerAcentos(termoOriginal);
-        const tabelaElemento = document.getElementById('corpo-tabela');
-        const topoElemento = document.getElementById('topo-tabela');
+    // Carrega o seu arquivo CSV automaticamente
+    // IMPORTANTE: O nome do arquivo aqui deve ser igual ao seu arquivo real
+    fetch('resultado (10).csv') 
+        .then(response => {
+            if (!response.ok) throw new Error('Não foi possível carregar o arquivo CSV.');
+            return response.text();
+        })
+        .then(textoCsv => {
+            dadosImoveis = parseCSV(textoCsv);
+            
+            // Ativa o campo de busca após carregar tudo
+            const input = document.getElementById('search-input');
+            input.disabled = false;
+            input.placeholder = "Busque por Proprietário, CPF, Inscrição, Bairro...";
+            document.getElementById('status-mensagem').style.display = 'none';
+            
+            exibirDados(dadosImoveis);
+        })
+        .catch(erro => {
+            console.error(erro);
+            document.getElementById('status-mensagem').innerText = "Erro ao carregar o arquivo CSV. Certifique-se de que o arquivo está na mesma pasta e que você está usando um servidor local (como Live Server).";
+            document.getElementById('status-mensagem').style.color = 'red';
+        });
+
+    // Função para jogar os dados na tabela HTML
+    function exibirDados(lista) {
+        const corpoTabela = document.getElementById('corpo-tabela');
         const contador = document.getElementById('contador-resultados');
+        corpoTabela.innerHTML = "";
         
-        tabelaElemento.innerHTML = '<tr><td colspan="100%" class="loading-text">🔍 Vasculhando banco de dados...</td></tr>';
+        contador.innerText = `${lista.length} registro(s) encontrado(s)`;
+
+        if (lista.length === 0) {
+            corpoTabela.innerHTML = `<tr><td colspan="14" class="sem-resultados">Nenhum registro encontrado para essa busca.</td></tr>`;
+            return;
+        }
+
+        lista.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><b>${item['PROPRIETARIO'] || '-'}</b></td>
+                <td>${item['RESPONSAVEL'] || '-'}</td>
+                <td>${item['CNPJ CPF RESPONSAVEL'] || '-'}</td>
+                <td>${item['INSCRICAO'] || '-'}</td>
+                <td>${item['BAIRRO'] || '-'}</td>
+                <td>${item['IMOVELLOGRADOURO'] || '-'}</td>
+                <td>${item['NUMERO'] || '-'}</td>
+                <td>${item['IMOVELCEP'] || '-'}</td>
+                <td>${item['QUADRA'] || '-'}</td>
+                <td>${item['LOTES'] || '-'}</td>
+                <td>${item['AREA TERRENO'] || '-'}</td>
+                <td>${item['AREA EDIFICADA'] || '-'}</td>
+                <td>${item['MATRICULA'] || '-'}</td>
+                <td>${item['ENTREGA ENDERECO'] || '-'}</td>
+            `;
+            corpoTabela.appendChild(tr);
+        });
+    }
+
+    // Filtro de pesquisa em tempo real
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        const termo = e.target.value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Remove acentos na busca
         
-        const correspondencias = [];
-        
-        for (let i = 1; i < linhasCache.length; i++) {
-            const linhaBruta = linhasCache[i];
-            if (!linhaBruta.trim()) continue;
-            
-            const linhaSemAcento = removerAcentos(linhaBruta);
-            
-            // Busca direta no texto bruto da linha para não falhar por causa de caracteres ocultos
-            if (linhaSemAcento.indexOf(termoSemAcento) !== -1) {
-                const colunas = linhaBruta.split(separadorGlobal).map(v => v.replace(/"/g, '').trim());
-                while (colunas.length < cabecalho
+        const filtrados = dadosImoveis.filter(item => {
+            // Transforma os dados em texto simples e remove acentos para comparar
+            const textoLinha = Object.values(item).join(' ').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return textoLinha.includes(termo);
+        });
+
+        exibirDados(filtrados);
+    });
+</script>
+
+</body>
+</html>
