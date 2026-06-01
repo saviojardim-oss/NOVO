@@ -45,11 +45,28 @@
 <script>
     let linhasCache = null;
     let cabecalhoCache = null;
-    let separador = ';'; 
+    let separadorGlobal = ';'; 
 
-    // Função para remover acentos na hora de comparar o texto
     function removerAcentos(texto) {
         return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    }
+
+    // Função inteligente que testa qual formato decodifica melhor os acentos brutos
+    function decodificarTexto(buffer) {
+        const decodificadores = ['utf-8', 'windows-1252'];
+        let textoFinal = "";
+        
+        for (let codificacao of decodificadores) {
+            const decoder = new TextDecoder(codificacao);
+            const textoTestado = decoder.decode(buffer);
+            // Se não contiver caracteres corrompidos clássicos de conversão ANSI->UTF8, escolhe ele
+            if (!textoTestado.includes('') || codificacao === 'windows-1252') {
+                textoFinal = textoTestado;
+                console.log("Codificação detectada: " + codificacao);
+                break;
+            }
+        }
+        return textoFinal;
     }
 
     async function carregarCSVPuro() {
@@ -57,26 +74,24 @@
             const res = await fetch('banco.csv');
             const buffer = await res.arrayBuffer();
             
-            // Força a leitura correta de acentos do padrão brasileiro
-            const decoder = new TextDecoder('utf-8');
-            const texto = decoder.decode(buffer);
-            
+            const texto = decodificarTexto(buffer);
             linhasCache = texto.split(/\r?\n/);
             
             if (linhasCache.length > 0) {
-                // Descobre se o CSV usa ponto e vírgula ou vírgula
                 const primeiraLinha = linhasCache[0];
-                if (primeiraLinha.indexOf(';') === -1 && primeiraLinha.indexOf(',') !== -1) {
-                    separador = ',';
-                }
-                cabecalhoCache = primeiraLinha.split(separador).map(c => c.replace(/"/g, '').trim());
+                // Identifica automaticamente o separador correto
+                if (primeiraLinha.indexOf(';') !== -1) separadorGlobal = ';';
+                else if (primeiraLinha.indexOf(',') !== -1) separadorGlobal = ',';
+                else if (primeiraLinha.indexOf('\t') !== -1) separadorGlobal = '\t';
+
+                cabecalhoCache = primeiraLinha.split(separadorGlobal).map(c => c.replace(/"/g, '').trim());
             }
 
             document.getElementById('status').innerText = "✅ Banco de Dados CSV Pronto! Consultas liberadas.";
             document.getElementById('status').style.background = "#e6f4ea";
             document.getElementById('status').style.color = "#137333";
         } catch (err) {
-            document.getElementById('status').innerText = "❌ Erro ao carregar o arquivo banco.csv.";
+            document.getElementById('status').innerText = "❌ Erro ao ler o arquivo banco.csv.";
             console.error(err);
         }
     }
@@ -86,47 +101,21 @@
         if (!termoOriginal || !linhasCache) return;
         
         const termoSemAcento = removerAcentos(termoOriginal);
-        
         const tabelaElemento = document.getElementById('corpo-tabela');
         const topoElemento = document.getElementById('topo-tabela');
         const contador = document.getElementById('contador-resultados');
         
-        tabelaElemento.innerHTML = '<tr><td colspan="100%" class="loading-text">🔍 Buscando no CSV unificado...</td></tr>';
+        tabelaElemento.innerHTML = '<tr><td colspan="100%" class="loading-text">🔍 Vasculhando banco de dados...</td></tr>';
         
         const correspondencias = [];
         
         for (let i = 1; i < linhasCache.length; i++) {
-            if (!linhasCache[i].trim()) continue;
+            const linhaBruta = linhasCache[i];
+            if (!linhaBruta.trim()) continue;
             
-            // Remove acentos da linha inteira antes de testar a busca
-            const linhaSemAcento = removerAcentos(linhasCache[i]);
+            const linhaSemAcento = removerAcentos(linhaBruta);
             
+            // Busca direta no texto bruto da linha para não falhar por causa de caracteres ocultos
             if (linhaSemAcento.indexOf(termoSemAcento) !== -1) {
-                const colunas = linhasCache[i].split(separador).map(v => v.replace(/"/g, '').trim());
-                while (colunas.length < cabecalhoCache.length) colunas.push("");
-                correspondencias.push(colunas);
-            }
-            if (correspondencias.length >= 150) break; 
-        }
-        
-        if (correspondencias.length === 0) {
-            tabelaElemento.innerHTML = '<tr><td colspan="100%">Nenhum registro correspondente encontrado.</td></tr>';
-            topoElemento.innerHTML = '';
-            contador.innerText = "0 registros encontrados.";
-            return;
-        }
-        
-        topoElemento.innerHTML = "<tr>" + cabecalhoCache.map(c => "<th>" + c + "</th>").join('') + "</tr>";
-        tabelaElemento.innerHTML = correspondencias.map(linha => "<tr>" + linha.map(col => "<td>" + col + "</td>").join('') + "</tr>").join('');
-        contador.innerText = `Sucesso! Encontrados ${correspondencias.length} registro(s).`;
-    }
-
-    document.getElementById('termoBusca').addEventListener('keydown', function(e) { 
-        if (e.key === 'Enter') { e.preventDefault(); executarBuscaCSV(); } 
-    });
-
-    window.onload = carregarCSVPuro;
-</script>
-
-</body>
-</html>
+                const colunas = linhaBruta.split(separadorGlobal).map(v => v.replace(/"/g, '').trim());
+                while (colunas.length < cabecalho
